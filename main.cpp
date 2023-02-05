@@ -42,6 +42,7 @@ struct Error {
   Error(std::string highlighted, std::string filename, std::string token, std::string ctoken, size_t chars_count, size_t token_count)
     : filename(filename), token(token), highlighted(highlighted),
       chars_count(chars_count), token_count(token_count), ctoken(ctoken) {
+    ;
   }
 };
 
@@ -142,7 +143,6 @@ void find_errors(std::string &orig_content, std::string &new_content, std::strin
 
   if (errors.size() == 0) {
     std::cout << ofile << " and " << nfile << " match\n";
-    return;
   }
 
 }

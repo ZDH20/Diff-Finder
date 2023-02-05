@@ -10,55 +10,66 @@
   (exit(1));
 
 char DELIMITER = ' ';
+char HIGHLIGHTER = '+';
+
+enum Types {
+  INT,
+  FLOAT,
+  STRING,
+  CHAR,
+  VOID
+};
+
+std::map<Types, std::string> type_map;
+
+void type_map_init() {
+  type_map[INT]    = "int";
+  type_map[FLOAT]  = "float";
+  type_map[STRING] = "string";
+  type_map[CHAR]   = "char";
+  type_map[VOID]   = "void";
+}
 
 struct Error {
-  enum Types {
-    INT,
-    FLOAT,
-    STRING,
-    CHAR,
-    VOID
-  };
-  std::map<Types, std::string> type_map;
   std::string filename;
+  std::string highlighted;
   std::string token;
+  std::string ctoken;
   std::string type;
+  std::string ctype;
   size_t chars_count;
   size_t token_count;
-  Error(std::string filename, std::string token, size_t chars_count, size_t token_count)
-    : filename(filename), token(token),
-      chars_count(chars_count), token_count(token_count) {
-    type_map[INT]    = "int";
-    type_map[FLOAT]  = "float";
-    type_map[STRING] = "string";
-    type_map[CHAR]   = "char";
-    type_map[VOID]   = "void";
-    Types type = VOID;
-    bool fdecimal = false;
-    for (int i = 0; i < this->token.size(); i++) {
-      char c = this->token[i];
-      if (i == 0) {
-        if (isdigit(c)) {
-          type = INT;
-        } else if (c == '.' && this->token.size() > 1) {
-          type = FLOAT;
-          fdecimal = true;
-        } else {
-          type = CHAR;
-        }
+  Error(std::string highlighted, std::string filename, std::string token, std::string ctoken, size_t chars_count, size_t token_count)
+    : filename(filename), token(token), highlighted(highlighted),
+      chars_count(chars_count), token_count(token_count), ctoken(ctoken) {
+  }
+};
+
+std::string determine_type(std::string str) {
+  Types type = VOID;
+  bool fdecimal = false;
+  for (int i = 0; i < str.size(); i++) {
+    char c = str[i];
+    if (i == 0) {
+      if (isdigit(c)) {
+        type = INT;
+      } else if (c == '.' && str.size() > 1) {
+        type = FLOAT;
+        fdecimal = true;
       } else {
-        if (c == '.' && (type == INT || type == VOID) && !fdecimal) {
-          type = FLOAT;
-          fdecimal = true;
-        } else if (!isdigit(c)) {
-          type = STRING;
-        }
+        type = CHAR;
+      }
+    } else {
+      if (c == '.' && (type == INT || type == VOID) && !fdecimal) {
+        type = FLOAT;
+        fdecimal = true;
+      } else if (!isdigit(c)) {
+        type = STRING;
       }
     }
-    this->type = type_map[type];
   }
-
-};
+  return type_map[type];
+}
 
 // https://stackoverflow.com/questions/53849/how-do-i-tokenize-a-string-in-c
 void tokenize(std::string str, std::vector<std::string> &tokens) {
@@ -74,35 +85,59 @@ void tokenize(std::string str, std::vector<std::string> &tokens) {
   }
 }
 
-void dump_errors(std::vector<Error> &errors, std::string ofile, std::string nfile) {
-  if (errors.size() == 0) {
-    std::cout << "Files: " << ofile << " and " << nfile << " match\n";
-    return;
-  }
-
-  for (int i = 0; i < errors.size(); i++) {
-    std::cout << errors[i].type << std::endl;
-  }
-}
-
-std::vector<Error> find_errors(std::string &orig_content, std::string &new_content, std::string &filename) {
+void find_errors(std::string &orig_content, std::string &new_content, std::string &filename) {
   std::vector<Error> errors;
   std::vector<std::string> orig_tokens, new_tokens;
+  std::string highlighted = "";
 
   tokenize(orig_content, orig_tokens);
   tokenize(new_content, new_tokens);
 
-  size_t chars_count = 0, token_count = 0;
+  size_t chars_count = 1, token_count = 1;
 
   for (int i = 0; i < orig_tokens.size(); i++) {
     if (orig_tokens[i] != new_tokens[i]) {
-      errors.push_back(Error(filename, orig_tokens[i], chars_count, token_count));
+      for (int j = 0; j < i; j++) {
+        highlighted += orig_tokens[j];
+        highlighted += " ";
+      }
+      highlighted += HIGHLIGHTER;
+      highlighted += orig_tokens[i];
+      highlighted += HIGHLIGHTER;
+      highlighted += " ";
+      for (int j = i + 1; j < orig_tokens.size(); j++) {
+        highlighted += orig_tokens[j];
+        highlighted += " ";
+      }
+      Error e(highlighted, filename, orig_tokens[i], new_tokens[i], chars_count, token_count);
+      e.ctoken = std::string(new_tokens[i]);
+      e.ctype = determine_type(e.ctoken);
+      e.type = determine_type(e.token);
+      errors.push_back(e);
+      highlighted.clear();
     }
-    chars_count += orig_tokens[i].size();
+    chars_count += orig_tokens[i].size() + 1;
     token_count += 1;
   }
 
-  return errors;
+  for (int i = 0; i < errors.size(); i++) {
+    std::cout << "------------------\n";
+    std::cout << "\nOUTPUT -> " << errors[i].highlighted;
+    std::cout << "\nEXPECTED -> " << errors[i].ctoken;
+    std::cout << "\nGot: " << errors[i].type << "\nExpected: " << errors[i].ctype << '\n';
+    if (errors[i].type == errors[i].ctype && errors[i].type == "int") {
+      std::cout << "Off by: " << stoi(errors[i].token) - stoi(errors[i].ctoken) << '\n';
+    } else if (errors[i].type == errors[i].ctype && errors[i].type == "float") {
+      std::cout << "Off by: " << (::atof(errors[i].token.c_str()) - ::atof(errors[i].ctoken.c_str())) << '\n';
+    }
+    std::cout << "Chars in: " << errors[i].chars_count << "\nToken number: " << errors[i].token_count << '\n';
+  }
+
+  // if (errors.size() == 0) {
+  //   std::cout << "Files: " << ofile << " and " << nfile << " match\n";
+  //   return;
+  // }
+
 }
 
 void usage() {
@@ -119,6 +154,8 @@ int main(int argc, char **argv) {
   }
 
   std::string ofiles[argc/2], nfiles[argc/2];
+
+  type_map_init();
 
   for (int i = 0; *argv; i++) {
     ofiles[i] = *argv++;
@@ -145,8 +182,7 @@ int main(int argc, char **argv) {
       new_content = buffer.str();
     }
 
-    std::vector<Error> errors = find_errors(orig_content, new_content, ofiles[i]);
-    dump_errors(errors, ofiles[i], nfiles[i]);
+    find_errors(orig_content, new_content, ofiles[i]);
   }
 
   return 0;

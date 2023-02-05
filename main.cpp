@@ -50,6 +50,7 @@ std::string determine_type(std::string str) {
   bool fdecimal = false;
   for (int i = 0; i < str.size(); i++) {
     char c = str[i];
+    if (c == '\n') continue;
     if (i == 0) {
       if (isdigit(c)) {
         type = INT;
@@ -85,7 +86,7 @@ void tokenize(std::string str, std::vector<std::string> &tokens) {
   }
 }
 
-void find_errors(std::string &orig_content, std::string &new_content, std::string &filename) {
+void find_errors(std::string &orig_content, std::string &new_content, std::string ofile, std::string nfile) {
   std::vector<Error> errors;
   std::vector<std::string> orig_tokens, new_tokens;
   std::string highlighted = "";
@@ -103,13 +104,19 @@ void find_errors(std::string &orig_content, std::string &new_content, std::strin
       }
       highlighted += HIGHLIGHTER;
       highlighted += orig_tokens[i];
-      highlighted += HIGHLIGHTER;
+      if (orig_tokens[i][orig_tokens[i].size()-1] == '\n') {
+        highlighted.erase(highlighted.size()-1);
+        highlighted += HIGHLIGHTER;
+        highlighted += '\n';
+      } else {
+        highlighted += HIGHLIGHTER;
+      }
       highlighted += " ";
       for (int j = i + 1; j < orig_tokens.size(); j++) {
         highlighted += orig_tokens[j];
         highlighted += " ";
       }
-      Error e(highlighted, filename, orig_tokens[i], new_tokens[i], chars_count, token_count);
+      Error e(highlighted, ofile, orig_tokens[i], new_tokens[i], chars_count, token_count);
       e.ctoken = std::string(new_tokens[i]);
       e.ctype = determine_type(e.ctoken);
       e.type = determine_type(e.token);
@@ -133,10 +140,10 @@ void find_errors(std::string &orig_content, std::string &new_content, std::strin
     std::cout << "Chars in: " << errors[i].chars_count << "\nToken number: " << errors[i].token_count << '\n';
   }
 
-  // if (errors.size() == 0) {
-  //   std::cout << "Files: " << ofile << " and " << nfile << " match\n";
-  //   return;
-  // }
+  if (errors.size() == 0) {
+    std::cout << ofile << " and " << nfile << " match\n";
+    return;
+  }
 
 }
 
@@ -182,7 +189,7 @@ int main(int argc, char **argv) {
       new_content = buffer.str();
     }
 
-    find_errors(orig_content, new_content, ofiles[i]);
+    find_errors(orig_content, new_content, ofiles[i], nfiles[i]);
   }
 
   return 0;

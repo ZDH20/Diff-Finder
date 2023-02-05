@@ -2,7 +2,14 @@
 #include <iostream>
 #include <map>
 #include <sstream>
+#include <string.h>
 #include <vector>
+
+#define NOOP(x) (void(x))
+#define TODO (std::cout << "TODO: line " << __LINE__ << std::endl); \
+  (exit(1));
+
+char DELIMITER = ' ';
 
 struct Error {
   enum Types {
@@ -20,15 +27,12 @@ struct Error {
   size_t token_count;
   Error(std::string filename, std::string token, size_t chars_count, size_t token_count)
     : filename(filename), token(token),
-      chars_count(chars_count), token_count(token_count), type("") {
+      chars_count(chars_count), token_count(token_count) {
     type_map[INT]    = "int";
     type_map[FLOAT]  = "float";
     type_map[STRING] = "string";
     type_map[CHAR]   = "char";
     type_map[VOID]   = "void";
-  }
-
-  std::string determine_type() {
     Types type = VOID;
     bool fdecimal = false;
     for (int i = 0; i < this->token.size(); i++) {
@@ -36,7 +40,7 @@ struct Error {
       if (i == 0) {
         if (isdigit(c)) {
           type = INT;
-        } else if (c == '.') {
+        } else if (c == '.' && this->token.size() > 1) {
           type = FLOAT;
           fdecimal = true;
         } else {
@@ -51,24 +55,58 @@ struct Error {
         }
       }
     }
-
-    return type_map[type];
+    this->type = type_map[type];
   }
+
 };
 
-void print_errors(std::vector<Error> &errors, std::string ofile, std::string nfile) {
-  if (errors.size() == 0) {
-    std::cout << "Files: " << ofile << " and " << nfile << " match\n";
+// https://stackoverflow.com/questions/53849/how-do-i-tokenize-a-string-in-c
+void tokenize(std::string str, std::vector<std::string> &tokens) {
+  size_t start = str.find_first_not_of(DELIMITER), end=start;
+
+  while (start != std::string::npos){
+    // Find next occurence of delimiter
+    end = str.find(DELIMITER, start);
+    // Push back the token found into vector
+    tokens.push_back(str.substr(start, end-start));
+    // Skip all occurences of the delimiter to find new start
+    start = str.find_first_not_of(DELIMITER, end);
   }
 }
 
-std::vector<Error> find_errors(std::string &orig_content, std::string &new_content) {
+void dump_errors(std::vector<Error> &errors, std::string ofile, std::string nfile) {
+  if (errors.size() == 0) {
+    std::cout << "Files: " << ofile << " and " << nfile << " match\n";
+    return;
+  }
+
+  for (int i = 0; i < errors.size(); i++) {
+    std::cout << errors[i].type << std::endl;
+  }
+}
+
+std::vector<Error> find_errors(std::string &orig_content, std::string &new_content, std::string &filename) {
   std::vector<Error> errors;
+  std::vector<std::string> orig_tokens, new_tokens;
+
+  tokenize(orig_content, orig_tokens);
+  tokenize(new_content, new_tokens);
+
+  size_t chars_count = 0, token_count = 0;
+
+  for (int i = 0; i < orig_tokens.size(); i++) {
+    if (orig_tokens[i] != new_tokens[i]) {
+      errors.push_back(Error(filename, orig_tokens[i], chars_count, token_count));
+    }
+    chars_count += orig_tokens[i].size();
+    token_count += 1;
+  }
+
   return errors;
 }
 
 void usage() {
-  fprintf(stderr, "usage: ./diff_finder <ofile1> <nfile1> (optional <ofile2> <nfile2> ... <ofileN> <nfileN>)");
+  fprintf(stderr, "usage: ./diff_finder <ofile1> <nfile1> (optional <ofile2> <nfile2> ... <ofileN> <nfileN>)\n");
 }
 
 int main(int argc, char **argv) {
@@ -107,10 +145,8 @@ int main(int argc, char **argv) {
       new_content = buffer.str();
     }
 
-    Error e("", "1234", 0, 0);
-    std::cout << e.determine_type() << std::endl;
-    // std::vector<Error> errors = find_errors(orig_content, new_content);
-    // print_errors(errors, ofiles[i], nfiles[i]);
+    std::vector<Error> errors = find_errors(orig_content, new_content, ofiles[i]);
+    dump_errors(errors, ofiles[i], nfiles[i]);
   }
 
   return 0;
